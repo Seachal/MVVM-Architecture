@@ -1,33 +1,29 @@
 package com.qingmei2.sample.ui.main.repos
 
-import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
-import com.jakewharton.rxbinding3.recyclerview.scrollStateChanges
-import com.jakewharton.rxbinding3.swiperefreshlayout.refreshes
-import com.qingmei2.rhine.base.view.fragment.BaseFragment
-import com.qingmei2.rhine.ext.jumpBrowser
-import com.qingmei2.rhine.ext.reactivex.clicksThrottleFirst
-import com.qingmei2.rhine.util.RxSchedulers
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.asLiveData
+import androidx.paging.LoadState
+import com.qingmei2.architecture.core.base.view.fragment.BaseFragment
+import com.qingmei2.architecture.core.ext.jumpBrowser
+import com.qingmei2.architecture.core.ext.observe
 import com.qingmei2.sample.R
-import com.qingmei2.sample.base.BaseApplication
-import com.qingmei2.sample.common.listScrollChangeStateProcessor
+import com.qingmei2.sample.utils.removeAllAnimation
 import com.qingmei2.sample.utils.toast
-import com.uber.autodispose.autoDisposable
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.android.synthetic.main.fragment_home.*
 import kotlinx.android.synthetic.main.fragment_repos.*
-import org.kodein.di.Kodein
-import org.kodein.di.generic.instance
-import java.util.concurrent.TimeUnit
+import kotlinx.android.synthetic.main.fragment_repos.fabTop
+import kotlinx.android.synthetic.main.fragment_repos.mRecyclerView
+import kotlinx.android.synthetic.main.fragment_repos.mSwipeRefreshLayout
+import kotlinx.android.synthetic.main.fragment_repos.toolbar
 
+@AndroidEntryPoint
 class ReposFragment : BaseFragment() {
 
-    override val kodein: Kodein = Kodein.lazy {
-        extend(parentKodein)
-        import(reposKodeinModule)
-    }
-
-    private val mViewModel: ReposViewModel by instance()
+    private val mViewModel: ReposViewModel by viewModels()
 
     override val layoutId: Int = R.layout.fragment_repos
 
@@ -38,29 +34,21 @@ class ReposFragment : BaseFragment() {
         toolbar.inflateMenu(R.menu.menu_repos_filter_type)
 
         mRecyclerView.adapter = mAdapter
+        mRecyclerView.removeAllAnimation()
 
         binds()
     }
 
     private fun binds() {
-        // when list scrolling start or stop, then switch bottom button visible state.
-        mRecyclerView.scrollStateChanges()
-                .debounce(500, TimeUnit.MILLISECONDS)
-                .compose(listScrollChangeStateProcessor)
-                .autoDisposable(scopeProvider)
-                .subscribe(::switchFabState)
-
         // swipe refresh event.
-        mSwipeRefreshLayout.refreshes()
-                .flatMapCompletable { mViewModel.refreshDataSource() }
-                .autoDisposable(scopeProvider)
-                .subscribe()
+        mSwipeRefreshLayout.setOnRefreshListener {
+            mAdapter.refresh()
+        }
 
         // when button was clicked, scrolling list to top.
-        fabTop.clicksThrottleFirst()
-                .map { 0 }
-                .autoDisposable(scopeProvider)
-                .subscribe(mRecyclerView::scrollToPosition)
+        fabTop.setOnClickListener {
+            mRecyclerView.scrollToPosition(0)
+        }
 
         // menu item clicked event.
         toolbar.setOnMenuItemClickListener {
@@ -69,33 +57,20 @@ class ReposFragment : BaseFragment() {
         }
 
         // list item clicked event.
-        mAdapter.getItemClickEvent()
-                .autoDisposable(scopeProvider)
-                .subscribe(BaseApplication.INSTANCE::jumpBrowser)
+        observe(mAdapter.getItemClickEvent(), requireActivity()::jumpBrowser)
 
-        mViewModel.observeViewState()
-                .observeOn(RxSchedulers.ui)
-                .autoDisposable(scopeProvider)
-                .subscribe(::onNewState)
-    }
-
-    private fun onNewState(state: ReposViewState) {
-        if (state.throwable != null) {
-            // handle throwable
-            toast { "network failure." }
+        observe(mAdapter.loadStateFlow.asLiveData()) { loadStates ->
+            mSwipeRefreshLayout.isRefreshing = loadStates.refresh is LoadState.Loading
         }
 
-        if (state.isLoading != mSwipeRefreshLayout.isRefreshing) {
-            mSwipeRefreshLayout.isRefreshing = state.isLoading
-        }
-
-        if (state.pagedList != null) {
-            mAdapter.submitList(state.pagedList)
+        observe(mViewModel.pagedListLiveData) {
+            mAdapter.submitData(lifecycle, it)
+            mRecyclerView.scrollToPosition(0)
         }
     }
 
     private fun onMenuSelected(menuItem: MenuItem) {
-        mViewModel.onSortChanged(
+        val isKeyUpdated = mViewModel.setSortKey(
                 when (menuItem.itemId) {
                     R.id.menu_repos_letter -> ReposViewModel.sortByLetter
                     R.id.menu_repos_update -> ReposViewModel.sortByUpdate
@@ -103,15 +78,7 @@ class ReposFragment : BaseFragment() {
                     else -> throw IllegalArgumentException("failure menuItem id.")
                 }
         )
-    }
-
-    private fun switchFabState(show: Boolean) {
-        when (show) {
-            false -> ObjectAnimator.ofFloat(fabTop, "translationX", 250f, 0f)
-            true -> ObjectAnimator.ofFloat(fabTop, "translationX", 0f, 250f)
-        }.apply {
-            duration = 300
-            start()
-        }
+        if (isKeyUpdated)
+            mAdapter.refresh()
     }
 }

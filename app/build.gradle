@@ -1,25 +1,31 @@
-apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
-apply plugin: 'kotlin-kapt'
+plugins {
+    id "com.github.qingmei2.plugin"
+    id "com.android.application"
+    id "kotlin-android"
+    id "kotlin-android-extensions"
+    id "kotlin-kapt"
+    id "dagger.hilt.android.plugin"
+    id "com.google.protobuf" version "0.8.12"
+}
+
+import com.github.qingmei2.plugin.*
 
 android {
-    compileSdkVersion build_version.compileSdkVersion
+    compileSdkVersion BuildVersions.compileSdkVersion
 
     defaultConfig {
         applicationId "com.qingmei2.sample"
-        minSdkVersion build_version.minSdkVersion
-        targetSdkVersion build_version.targetSdkVersion
-        versionCode build_version.versionCode
-        versionName build_version.versionName
+        minSdkVersion BuildVersions.minSdkVersion
+        targetSdkVersion BuildVersions.targetSdkVersion
+        versionCode BuildVersions.versionCode
+        versionName BuildVersions.versionName
 
         multiDexEnabled true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         Properties properties = new Properties()
         properties.load(project.rootProject.file('local.properties').newDataInputStream())
-        buildConfigField "String", "CLIENT_ID", properties.getProperty("CLIENT_ID")
-        buildConfigField "String", "CLIENT_SECRET", properties.getProperty("CLIENT_SECRET")
+        buildConfigField "String", "USER_ACCESS_TOKEN", properties.getProperty("USER_ACCESS_TOKEN")
     }
 
     buildTypes {
@@ -35,35 +41,48 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
+        freeCompilerArgs += ["-Xopt-in=kotlin.RequiresOptIn"]
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+        abortOnError false
     }
 }
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    implementation project(':mvvm_rhine')
+    implementation project(':architecture-core')
+    implementation project(':module_protobuf')
 
-    implementation libs.appcompat
-    implementation libs.recyclerview
-    implementation libs.design
-    implementation libs.constraint
-    implementation libs.flexbox
+    implementation Dependencies.appcompat
+    implementation Dependencies.recyclerview
+    implementation Dependencies.materialDesign
+    implementation Dependencies.constraintlayout
+    implementation Dependencies.flexbox
+    implementation Dependencies.swiperefreshlayout
 
     implementation 'de.hdodenhof:circleimageview:2.2.0'
     implementation 'com.cpacm:floatingmusicmenu:1.0.0'
 
     implementation 'com.facebook.stetho:stetho:1.5.1'
 
-    debugImplementation libs.leak_canary_debug
-    debugImplementation libs.leak_canary_debug_support
-    releaseImplementation libs.leak_canary_release
+    debugImplementation Dependencies.leakCanaryDebug
+    debugImplementation Dependencies.leakCanaryDebugSupport
+    releaseImplementation Dependencies.leakCanaryRelease
 
-    kapt libs.glide_compiler
-    kapt libs.jetpack_room_compiler
-    kapt libs.jetpack_lifecycle_compiler
+    kapt Dependencies.glideCompiler
+    kapt Dependencies.roomCompiler
+    kapt Dependencies.lifecycleCompiler
 
-    testImplementation libs.junit
+    implementation Dependencies.daggerHilt
+    implementation Dependencies.daggerViewModel
+    kapt Dependencies.daggerAndroidCompiler
+    kapt Dependencies.daggerHiltCompiler
 
-    androidTestImplementation libs.espresso_core
+    testImplementation Dependencies.junit4
+
+    androidTestImplementation Dependencies.espresso
 }
 
 kapt {

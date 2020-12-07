@@ -3,29 +3,34 @@ package com.qingmei2.sample.ui.login
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
-import com.qingmei2.rhine.base.view.fragment.BaseFragment
-import com.qingmei2.rhine.ext.reactivex.clicksThrottleFirst
-import com.qingmei2.rhine.util.RxSchedulers
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.viewModels
+import com.qingmei2.architecture.core.base.view.fragment.BaseFragment
+import com.qingmei2.architecture.core.ext.observe
 import com.qingmei2.sample.R
 import com.qingmei2.sample.http.Errors
 import com.qingmei2.sample.ui.MainActivity
 import com.qingmei2.sample.utils.toast
-import com.uber.autodispose.autoDisposable
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.android.synthetic.main.fragment_login.*
-import org.kodein.di.Kodein
-import org.kodein.di.generic.instance
 import retrofit2.HttpException
 
+@AndroidEntryPoint
 class LoginFragment : BaseFragment() {
-
-    override val kodein: Kodein = Kodein.lazy {
-        extend(parentKodein)
-        import(loginKodeinModule)
-    }
 
     override val layoutId: Int = R.layout.fragment_login
 
-    private val mViewModel: LoginViewModel by instance()
+    private val mViewModel: LoginViewModel by viewModels()
+
+    private val permissionRequest: ActivityResultLauncher<String> =
+            prepareCall(ActivityResultContracts.RequestPermission()) { isGrant ->
+                when (isGrant) {
+                    true -> mViewModel.login(tvUsername.text.toString(), tvPassword.text.toString())
+                    false -> Toast.makeText(requireContext(), "need permission first.", Toast.LENGTH_SHORT).show()
+                }
+            }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -33,14 +38,21 @@ class LoginFragment : BaseFragment() {
     }
 
     private fun binds() {
-        mBtnSignIn.clicksThrottleFirst()
-                .autoDisposable(scopeProvider)
-                .subscribe { mViewModel.login(tvUsername.text.toString(), tvPassword.text.toString()) }
+        mBtnSignIn.setOnClickListener {
+            mViewModel.login(tvUsername.text.toString(), tvPassword.text.toString())
+        }
 
-        mViewModel.observeViewState()
-                .observeOn(RxSchedulers.ui)
-                .autoDisposable(scopeProvider)
-                .subscribe(this::onNewState)
+        observe(mViewModel.stateLiveData, this::onNewState)
+        observe(mViewModel.autoLoginLiveData, this::onAutoLogin)
+    }
+
+    private fun onAutoLogin(autoLoginEvent: AutoLoginEvent) {
+        if (autoLoginEvent.autoLogin) {
+            tvUsername.setText(autoLoginEvent.username, TextView.BufferType.EDITABLE)
+            tvPassword.setText(autoLoginEvent.password, TextView.BufferType.EDITABLE)
+
+            mViewModel.login(autoLoginEvent.username, autoLoginEvent.password)
+        }
     }
 
     private fun onNewState(state: LoginViewState) {
@@ -60,19 +72,8 @@ class LoginFragment : BaseFragment() {
 
         mProgressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
 
-        if (state.autoLoginEvent != null                // has auto login info
-                && state.autoLoginEvent.autoLogin       // allow auto login by user
-                && state.useAutoLoginEvent              // ensure auto login info be used one time
-        ) {
-            tvUsername.setText(state.autoLoginEvent.username, TextView.BufferType.EDITABLE)
-            tvPassword.setText(state.autoLoginEvent.password, TextView.BufferType.EDITABLE)
-
-            mViewModel.onAutoLoginEventUsed()
-            mViewModel.login(state.autoLoginEvent.username, state.autoLoginEvent.password)
-        }
-
         if (state.loginInfo != null) {
-            MainActivity.launch(activity!!)
+            MainActivity.launch(requireActivity())
         }
     }
 }

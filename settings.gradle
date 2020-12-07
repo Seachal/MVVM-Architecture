@@ -1,1 +1,2 @@
-include ':app', ':mvvm_rhine'
+include ':app', ':architecture-core',':module_protobuf'
+includeBuild 'versionPlugin'

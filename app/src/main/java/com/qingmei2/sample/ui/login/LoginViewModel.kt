@@ -1,92 +1,47 @@
 package com.qingmei2.sample.ui.login
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import com.qingmei2.rhine.base.viewmodel.BaseViewModel
-import com.qingmei2.rhine.ext.reactivex.copyMap
-import com.qingmei2.rhine.util.SingletonHolderSingleArg
-import com.qingmei2.sample.base.Result
-import com.qingmei2.sample.entity.UserInfo
+import androidx.hilt.lifecycle.ViewModelInject
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.asLiveData
+import androidx.lifecycle.viewModelScope
+import com.qingmei2.architecture.core.base.viewmodel.BaseViewModel
+import com.qingmei2.architecture.core.ext.postNext
+import com.qingmei2.sample.base.Results
 import com.qingmei2.sample.http.Errors
-import com.qingmei2.sample.http.globalHandleError
-import com.uber.autodispose.autoDisposable
-import io.reactivex.Observable
-import io.reactivex.subjects.BehaviorSubject
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.launch
 
 @SuppressWarnings("checkResult")
-class LoginViewModel(
+class LoginViewModel @ViewModelInject constructor(
         private val repo: LoginRepository
 ) : BaseViewModel() {
 
-    private val mViewStateSubject: BehaviorSubject<LoginViewState> =
-            BehaviorSubject.createDefault(LoginViewState.initial())
+    private val _stateLiveData: MutableLiveData<LoginViewState> = MutableLiveData(LoginViewState.initial())
+    private val autoLoginInfoFlow: Flow<AutoLoginEvent> = repo.fetchAutoLogin().take(1)
 
-    init {
-        repo.fetchAutoLogin().singleOrError()
-                .onErrorReturn { AutoLoginEvent(false, "", "") }
-                .autoDisposable(this)
-                .subscribe { event ->
-                    mViewStateSubject.copyMap { state ->
-                        state.copy(isLoading = false, throwable = null, autoLoginEvent = event, loginInfo = null)
-                    }
-                }
-    }
-
-    fun observeViewState(): Observable<LoginViewState> {
-        return mViewStateSubject.hide().distinctUntilChanged()
-    }
-
-    fun onAutoLoginEventUsed() {
-        mViewStateSubject.copyMap { state ->
-            state.copy(isLoading = false, throwable = null, useAutoLoginEvent = false, loginInfo = null)
-        }
-    }
+    val autoLoginLiveData = autoLoginInfoFlow.asLiveData()
+    val stateLiveData: LiveData<LoginViewState> = _stateLiveData
 
     fun login(username: String?, password: String?) {
         when (username.isNullOrEmpty() || password.isNullOrEmpty()) {
-            true -> mViewStateSubject.copyMap { state ->
-                state.copy(isLoading = false, throwable = Errors.EmptyInputError,
-                        loginInfo = null, autoLoginEvent = null)
+            true -> _stateLiveData.postNext { state ->
+                state.copy(isLoading = false, throwable = Errors.EmptyInputError, loginInfo = null)
             }
-            false -> repo
-                    .login(username, password)
-                    .compose(globalHandleError())
-                    .map { either ->
-                        either.fold({
-                            Result.failure<UserInfo>(it)
-                        }, {
-                            Result.success(it)
-                        })
+            false -> viewModelScope.launch {
+                _stateLiveData.postNext {
+                    it.copy(isLoading = true, throwable = null, loginInfo = null)
+                }
+                when (val result = repo.login(username, password)) {
+                    is Results.Failure -> _stateLiveData.postNext {
+                        it.copy(isLoading = false, throwable = result.error, loginInfo = null)
                     }
-                    .startWith(Result.loading())
-                    .startWith(Result.idle())
-                    .onErrorReturn { Result.failure(it) }
-                    .autoDisposable(this)
-                    .subscribe { state ->
-                        when (state) {
-                            is Result.Loading -> mViewStateSubject.copyMap {
-                                it.copy(isLoading = true, throwable = null, loginInfo = null)
-                            }
-                            is Result.Idle -> mViewStateSubject.copyMap {
-                                it.copy(isLoading = false, throwable = null, loginInfo = null)
-                            }
-                            is Result.Failure -> mViewStateSubject.copyMap {
-                                it.copy(isLoading = true, throwable = state.error, loginInfo = null)
-                            }
-                            is Result.Success -> mViewStateSubject.copyMap {
-                                it.copy(isLoading = true, throwable = null, loginInfo = state.data)
-                            }
-                        }
+                    is Results.Success -> _stateLiveData.postNext {
+                        it.copy(isLoading = false, throwable = null, loginInfo = result.data)
                     }
+                }
+            }
         }
     }
-}
-
-@Suppress("UNCHECKED_CAST")
-class LoginViewModelFactory(
-        private val repo: LoginRepository
-) : ViewModelProvider.Factory {
-
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T =
-            LoginViewModel(repo) as T
 }

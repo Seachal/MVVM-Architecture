@@ -1,16 +1,22 @@
-# MVVM-Rhine
+# MVVM-Architecture
 
-**The MVVM using RxJava2 and Android Jetpack.**
+**The MVVM arch using Coroutine and Android Jetpack.**
 
-### English Documentation | [中文文档](https://github.com/qingmei2/MVVM-Rhine)
+* English Documentation | [中文文档](https://github.com/qingmei2/MVVM-Architecture)
+
+This repo provides two `Mvvm` architecture implementation, see:
+ 
+* [Jetpack + Coroutine + Dagger-Hilt](https://github.com/qingmei2/MVVM-Architecture) 
+* [Jetpack + Coroutine + Kodein](https://github.com/qingmei2/MVVM-Architecture/tree/kodein_coroutine_livedata) 
+* [Jetpack + RxJava + Kodein](https://github.com/qingmei2/MVVM-Architecture/tree/branch_rxjava) 
 
 ## ScreenShots
 
 <div align:left;display:inline;>
-<img width="200" height="360" src="https://github.com/qingmei2/MVVM-Rhine/blob/master/screenshots/login.png"/>
-<img width="200" height="360" src="https://github.com/qingmei2/MVVM-Rhine/blob/master/screenshots/home.png"/>
-<img width="200" height="360" src="https://github.com/qingmei2/MVVM-Rhine/blob/master/screenshots/repos.png"/>
-<img width="200" height="360" src="https://github.com/qingmei2/MVVM-Rhine/blob/master/screenshots/me.png"/>
+<img width="200" height="360" src="https://upload-images.jianshu.io/upload_images/7293029-17fd103f3c524a1c.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/200"/>
+<img width="200" height="360" src="https://upload-images.jianshu.io/upload_images/7293029-33af9e0ee5686851.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/200"/>
+<img width="200" height="360" src="https://upload-images.jianshu.io/upload_images/7293029-177d808edca4f7ee.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/200"/>
+<img width="200" height="360" src="https://upload-images.jianshu.io/upload_images/7293029-20e72a2bdfaa8f7e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/200"/>
 </div>
 
 ## Libraries
@@ -27,7 +33,9 @@
 
 * [Navigation: Handle everything needed for in-app navigation.](https://developer.android.com/topic/libraries/architecture/navigation/)
 
-* [Paging: Makes it easier for you to load data gradually and gracefully within your app's RecyclerView.](https://developer.android.com/topic/libraries/architecture/paging/)
+* [Paging3: Makes it easier for you to load data gradually and gracefully within your app's RecyclerView.](https://developer.android.com/topic/libraries/architecture/paging/)
+
+* [DataStore: A data storage solution that allows you to store key-value pairs or typed objects with protocol buffers. ](https://developer.android.google.cn/topic/libraries/architecture/datastore?hl=zh_cn)
 
 ### Http
 
@@ -37,27 +45,9 @@
 
 ### DI
 
-* [Kodein-DI: Painless Kotlin Dependency Injection](https://github.com/Kodein-Framework/Kodein-DI)
+* [~~Kodein-DI: Painless Kotlin Dependency Injection~~](https://github.com/Kodein-Framework/Kodein-DI)
 
-### ReactiveX
-
-* [RxKotlin: RxJava bindings for Kotlin](https://github.com/ReactiveX/RxKotlin)
-
-* [RxJava2: A library for composing asynchronous and event-based programs using observable sequences for the Java VM](https://github.com/ReactiveX/RxJava)
-
-* [RxAndroid: RxJava bindings for Android](https://github.com/ReactiveX/RxAndroid)
-
-* [RxBinding: RxJava binding APIs for Android's UI widgets.](https://github.com/JakeWharton/RxBinding)
-
-* [RxPermissions: Android runtime permissions powered by RxJava2.](https://github.com/tbruyelle/RxPermissions)
-
-* [RxWeaver: A lightweight and flexible error handler tools for RxJava2.](https://github.com/qingmei2/RxWeaver)
-
-* [AutoDispose: Automatic binding+disposal of RxJava 2 streams.](https://github.com/uber/AutoDispose)
-
-### Functional
-
-* [Arrow: Functional companion to Kotlin's Standard Library.](https://arrow-kt.io/)
+* [Dagger-hilt: Dependency injection with Hilt](https://developer.android.com/training/dependency-injection/hilt-android)
 
 ### Others
 
@@ -65,33 +55,21 @@
 
 * [Timber: A logger with a small, extensible API which provides utility on top of Android's normal Log class.](https://github.com/JakeWharton/timber)
 
-### Tools
-
-* [MVVM-Rhine-Template: Activity or Fragment code generation template for MVVM-Rhine.](https://github.com/qingmei2/MVVM-Rhine-Template)
-
 ## Usage
 
 Step1: Fork this repo directly:
 
 ```shell
-$ git clone https://github.com/qingmei2/MVVM-Rhine.git
+$ git clone https://github.com/qingmei2/MVVM-Architecture.git
 ```
 
-Step2: [Register](https://github.com/settings/applications/new) OAuth Application.
+Step2: [register](https://docs.github.com/cn/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) OAuth Application and get access token.
 
-<div align:left;display:inline;>
-<img width="480" height="480" src="https://github.com/qingmei2/MVVM-Rhine/blob/master/screenshots/regist_step1.png"/>
-</div>
+Step3: Put the `USER_ACCESS_TOKEN` into `local.properties`:
 
-Step3: Put the `Client ID` and the `Client Secret` into `local.properties`:
-
-<div align:left;display:inline;>
-<img width="550" height="384" src="https://github.com/qingmei2/MVVM-Rhine/blob/master/screenshots/regist_step2.png"/>
-</div>
 
 ```groovy
-CLIENT_ID = "xxxxxx"
-CLIENT_SECRET = "xxxxxx"
+USER_ACCESS_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxx" // your access token
 ```
 
 ## Thanks to
@@ -99,6 +77,11 @@ CLIENT_SECRET = "xxxxxx"
 :art: The UI design of this project refers to [gitme](https://github.com/flutterchina/gitme).
 
 :star: This repo is inspired by [rx-mvvm-android](https://github.com/ffgiraldez/rx-mvvm-android) and uses some of its source code.
+
+## Contributors
+
+* [DaQinShgy](https://github.com/DaQinShgy)
+* [GeorgCantor](https://github.com/GeorgCantor)
 
 ## License
 

@@ -1,163 +1,127 @@
 package com.qingmei2.sample.ui.main.repos
 
 import android.annotation.SuppressLint
-import androidx.paging.PagedList
-import com.qingmei2.rhine.base.repository.BaseRepositoryBoth
-import com.qingmei2.rhine.base.repository.ILocalDataSource
-import com.qingmei2.rhine.base.repository.IRemoteDataSource
-import com.qingmei2.rhine.ext.paging.toRxPagedList
-import com.qingmei2.rhine.util.RxSchedulers
+import androidx.annotation.AnyThread
+import androidx.annotation.MainThread
+import androidx.paging.*
+import androidx.room.withTransaction
+import com.qingmei2.architecture.core.base.repository.BaseRepositoryBoth
+import com.qingmei2.architecture.core.base.repository.ILocalDataSource
+import com.qingmei2.architecture.core.base.repository.IRemoteDataSource
+import com.qingmei2.architecture.core.ext.paging.globalPagingConfig
 import com.qingmei2.sample.PAGING_REMOTE_PAGE_SIZE
-import com.qingmei2.sample.base.Result
 import com.qingmei2.sample.db.UserDatabase
 import com.qingmei2.sample.entity.Repo
-import com.qingmei2.sample.http.globalHandleError
 import com.qingmei2.sample.http.service.ServiceManager
 import com.qingmei2.sample.manager.UserManager
-import io.reactivex.Completable
-import io.reactivex.Flowable
-import io.reactivex.processors.AsyncProcessor
-import io.reactivex.processors.PublishProcessor
+import com.qingmei2.sample.utils.toast
+import javax.inject.Inject
 
 @SuppressLint("CheckResult")
-class ReposRepository(
+class ReposRepository @Inject constructor(
         remote: RemoteReposDataSource,
-        local: LocalReposDataSource,
-        val mAutoDisposeObserver: AsyncProcessor<Unit> = AsyncProcessor.create()
+        local: LocalReposDataSource
 ) : BaseRepositoryBoth<RemoteReposDataSource, LocalReposDataSource>(remote, local) {
 
-    private val mRemoteRequestStateProcessor: PublishProcessor<Result<List<Repo>>> =
-            PublishProcessor.create()
+    var sortKeyProvider: () -> String = { ReposViewModel.sortByUpdate }
 
-    fun subscribeRemoteRequestState(): Flowable<Result<List<Repo>>> {
-        return mRemoteRequestStateProcessor.hide()
-    }
+    @MainThread
+    fun fetchRepoPager(): Pager<Int, Repo> {
+        val username: String = UserManager.INSTANCE.login
+        val remoteMediator = RepoPageRemoteMediator(remoteDataSource, localDataSource, sortKeyProvider, username)
 
-    fun refreshDataSource(sort: String) {
-        this.fetchRepoByPage(sort, 1)
-                .takeUntil(mAutoDisposeObserver)
-                .subscribe { mRemoteRequestStateProcessor.onNext(it) }
-    }
-
-    fun fetchPagedListFromDb(sort: () -> String): Flowable<PagedList<Repo>> {
-        return localDataSource.fetchPagedListFromDb(
-                boundaryCallback = object : PagedList.BoundaryCallback<Repo>() {
-                    override fun onZeroItemsLoaded() {
-                        refreshDataSource(sort())
-                    }
-
-                    override fun onItemAtEndLoaded(itemAtEnd: Repo) {
-                        val currentPageIndex = (itemAtEnd.indexInSortResponse / 30) + 1
-                        val nextPageIndex = currentPageIndex + 1
-                        this@ReposRepository.fetchRepoByPage(sort(), nextPageIndex)
-                                .takeUntil(mAutoDisposeObserver)
-                                .subscribe { mRemoteRequestStateProcessor.onNext(it) }
-                    }
-                }
+        return Pager(
+                config = globalPagingConfig,
+                remoteMediator = remoteMediator,
+                pagingSourceFactory = { localDataSource.fetchRepoPagingSource() }
         )
     }
-
-    private fun fetchRepoByPage(
-            sort: String,
-            pageIndex: Int,
-            remoteRequestPerPage: Int = PAGING_REMOTE_PAGE_SIZE
-    ): Flowable<Result<List<Repo>>> {
-        val username: String = UserManager.INSTANCE.login
-        return when (pageIndex == 1) {
-            true -> remoteDataSource
-                    .queryRepos(username, 1, remoteRequestPerPage, sort)
-                    .flatMap { result ->
-                        when (result is Result.Success) {
-                            true -> localDataSource.clearOldAndInsertNewData(result.data)
-                                    .andThen(Flowable.just(result))
-                            else -> Flowable.just(result)
-                        }
-                    }
-            false -> {
-                remoteDataSource
-                        .queryRepos(username, pageIndex, remoteRequestPerPage, sort)
-                        .flatMap { result ->
-                            when (result is Result.Success) {
-                                true -> localDataSource.insertNewPageData(result.data)
-                                        .andThen(Flowable.just(result))
-                                else -> Flowable.just(result)
-                            }
-                        }
-            }
-        }
-    }
 }
 
-class RemoteReposDataSource(private val serviceManager: ServiceManager) : IRemoteDataSource {
+class RemoteReposDataSource @Inject constructor(private val serviceManager: ServiceManager) : IRemoteDataSource {
 
-    fun queryRepos(
+    suspend fun queryRepos(
             username: String,
             pageIndex: Int,
             perPage: Int,
             sort: String
-    ): Flowable<Result<List<Repo>>> {
-        return when (pageIndex) {
-            1 -> fetchReposByPageInternal(username, pageIndex, perPage, sort)
-                    .map { Result.success(it) }
-                    .onErrorReturn { Result.failure(it) }
-            else -> {
-                fetchReposByPageInternal(username, pageIndex, perPage, sort)
-                        .map { Result.success(it) }
-                        .onErrorReturn { Result.failure(it) }
-            }
-        }
-    }
-
-    private fun fetchReposByPageInternal(
-            username: String,
-            pageIndex: Int,
-            perPage: Int,
-            sort: String
-    ): Flowable<List<Repo>> {
-        return serviceManager.userService
-                .queryRepos(username, pageIndex, perPage, sort)
-                .observeOn(RxSchedulers.ui)
-                .compose(globalHandleError())
-                .observeOn(RxSchedulers.io)
-                .subscribeOn(RxSchedulers.io)
+    ): List<Repo> {
+        return serviceManager.userService.queryRepos(username, pageIndex, perPage, sort)
     }
 }
 
-class LocalReposDataSource(
+class LocalReposDataSource @Inject constructor(
         private val db: UserDatabase
 ) : ILocalDataSource {
 
-    fun fetchPagedListFromDb(
-            boundaryCallback: PagedList.BoundaryCallback<Repo>
-    ): Flowable<PagedList<Repo>> {
+    @AnyThread
+    fun fetchRepoPagingSource(): PagingSource<Int, Repo> {
         return db.userReposDao().queryRepos()
-                .toRxPagedList(
-                        boundaryCallback = boundaryCallback,
-                        fetchSchedulers = RxSchedulers.io
-                )
     }
 
-    fun clearOldAndInsertNewData(newPage: List<Repo>): Completable {
-        return Completable.fromAction {
-            db.runInTransaction {
-                db.userReposDao().deleteAllRepos()
-                insertDataInternal(newPage)
-            }
-        }.subscribeOn(RxSchedulers.io)
+    @AnyThread
+    suspend fun clearOldAndInsertNewData(newPage: List<Repo>) {
+        db.withTransaction {
+            db.userReposDao().deleteAllRepos()
+            insertDataInternal(newPage)
+        }
     }
 
-    fun insertNewPageData(newPage: List<Repo>): Completable {
-        return Completable.fromAction {
-            db.runInTransaction { insertDataInternal(newPage) }
-        }.subscribeOn(RxSchedulers.io)
+    @AnyThread
+    suspend fun insertNewPageData(newPage: List<Repo>) {
+        db.withTransaction { insertDataInternal(newPage) }
     }
 
-    private fun insertDataInternal(newPage: List<Repo>) {
-        val start = db.userReposDao().getNextIndexInRepos()
+    @AnyThread
+    suspend fun fetchNextIndexInRepos(): Int {
+        return db.withTransaction {
+            db.userReposDao().getNextIndexInRepos() ?: 0
+        }
+    }
+
+    @AnyThread
+    private suspend fun insertDataInternal(newPage: List<Repo>) {
+        val start = fetchNextIndexInRepos()
         val items = newPage.mapIndexed { index, child ->
             child.indexInSortResponse = start + index
             child
         }
         db.userReposDao().insert(items)
+    }
+}
+
+@OptIn(ExperimentalPagingApi::class)
+class RepoPageRemoteMediator(
+        private val remoteDataSource: RemoteReposDataSource,
+        private val localDataSource: LocalReposDataSource,
+        private val sortKeyProvider: () -> String,
+        private val username: String
+) : RemoteMediator<Int, Repo>() {
+
+    override suspend fun load(loadType: LoadType, state: PagingState<Int, Repo>): MediatorResult {
+        return try {
+            val pageIndex = when (loadType) {
+                LoadType.REFRESH -> 1
+                LoadType.PREPEND -> return MediatorResult.Success(true)
+                LoadType.APPEND -> {
+                    val nextIndex = localDataSource.fetchNextIndexInRepos()
+                    if (nextIndex % PAGING_REMOTE_PAGE_SIZE != 0) {
+                        return MediatorResult.Success(true)
+                    }
+                    nextIndex / PAGING_REMOTE_PAGE_SIZE + 1
+                }
+            }
+            val sortKey = sortKeyProvider()
+            val data = remoteDataSource.queryRepos(username, pageIndex, PAGING_REMOTE_PAGE_SIZE, sortKey)
+            if (loadType == LoadType.REFRESH) {
+                localDataSource.clearOldAndInsertNewData(data)
+            } else {
+                localDataSource.insertNewPageData(data)
+            }
+            MediatorResult.Success(data.isEmpty())
+        } catch (exception: Exception) {
+            toast { exception.toString() }
+            MediatorResult.Error(exception)
+        }
     }
 }

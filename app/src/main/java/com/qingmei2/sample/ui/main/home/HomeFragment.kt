@@ -1,32 +1,26 @@
 package com.qingmei2.sample.ui.main.home
 
-import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.view.View
-import com.jakewharton.rxbinding3.recyclerview.scrollStateChanges
-import com.jakewharton.rxbinding3.swiperefreshlayout.refreshes
-import com.qingmei2.rhine.base.view.fragment.BaseFragment
-import com.qingmei2.rhine.ext.jumpBrowser
-import com.qingmei2.rhine.ext.reactivex.clicksThrottleFirst
-import com.qingmei2.rhine.util.RxSchedulers
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.asLiveData
+import androidx.lifecycle.lifecycleScope
+import androidx.paging.LoadState
+import com.qingmei2.architecture.core.base.view.fragment.BaseFragment
+import com.qingmei2.architecture.core.ext.jumpBrowser
+import com.qingmei2.architecture.core.ext.observe
 import com.qingmei2.sample.R
-import com.qingmei2.sample.base.BaseApplication
-import com.qingmei2.sample.common.listScrollChangeStateProcessor
-import com.qingmei2.sample.utils.toast
-import com.uber.autodispose.autoDisposable
+import com.qingmei2.sample.ui.search.SearchActivity
+import com.qingmei2.sample.utils.removeAllAnimation
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.android.synthetic.main.fragment_home.*
-import org.kodein.di.Kodein
-import org.kodein.di.generic.instance
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class HomeFragment : BaseFragment() {
 
-    override val kodein: Kodein = Kodein.lazy {
-        extend(parentKodein)
-        import(homeKodeinModule)
-    }
-
-    private val mViewModel: HomeViewModel by instance()
+    private val mViewModel: HomeViewModel by viewModels()
 
     override val layoutId: Int = R.layout.fragment_home
 
@@ -34,62 +28,38 @@ class HomeFragment : BaseFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        toolbar.inflateMenu(R.menu.menu_home_search)
         binds()
 
         mRecyclerView.adapter = mAdapter
+        mRecyclerView.removeAllAnimation()
     }
 
     private fun binds() {
-        // when list scrolling start or stop, then switch bottom button visible state.
-        mRecyclerView.scrollStateChanges()
-                .debounce(500, TimeUnit.MILLISECONDS)
-                .compose(listScrollChangeStateProcessor)
-                .autoDisposable(scopeProvider)
-                .subscribe(::switchFabState)
-
         // when button was clicked, scrolling list to top.
-        fabTop.clicksThrottleFirst()
-                .map { 0 }
-                .autoDisposable(scopeProvider)
-                .subscribe(mRecyclerView::scrollToPosition)
+        fabTop.setOnClickListener {
+            mRecyclerView.scrollToPosition(0)
+        }
 
         // swipe refresh event.
-        mSwipeRefreshLayout.refreshes()
-                .autoDisposable(scopeProvider)
-                .subscribe { mViewModel.refreshDataSource() }
+        mSwipeRefreshLayout.setOnRefreshListener(mAdapter::refresh)
+
+        // search menu item clicked event.
+        toolbar.setOnMenuItemClickListener {
+            SearchActivity.launch(requireActivity())
+            true
+        }
 
         // list item clicked event.
-        mAdapter.getItemClickEvent()
-                .autoDisposable(scopeProvider)
-                .subscribe(BaseApplication.INSTANCE::jumpBrowser)
+        observe(mAdapter.observeItemEvent(), requireActivity()::jumpBrowser)
 
-        mViewModel.observeViewState()
-                .observeOn(RxSchedulers.ui)
-                .autoDisposable(scopeProvider)
-                .subscribe(this::onStateArrived)
-    }
-
-    private fun onStateArrived(state: HomeViewState) {
-        if (state.throwable != null) {
-            toast { state.throwable.message ?: "network error." }
+        observe(mAdapter.loadStateFlow.asLiveData()) { loadStates ->
+            mSwipeRefreshLayout.isRefreshing = loadStates.refresh is LoadState.Loading
         }
 
-        if (state.pagedList != null) {
-            mAdapter.submitList(state.pagedList)
-        }
-
-        if (state.isLoading != mSwipeRefreshLayout.isRefreshing) {
-            mSwipeRefreshLayout.isRefreshing = state.isLoading
-        }
-    }
-
-    private fun switchFabState(show: Boolean) {
-        when (show) {
-            false -> ObjectAnimator.ofFloat(fabTop, "translationX", 250f, 0f)
-            true -> ObjectAnimator.ofFloat(fabTop, "translationX", 0f, 250f)
-        }.apply {
-            this.duration = 300
-            this.start()
+        observe(mViewModel.eventListLiveData) {
+            mAdapter.submitData(lifecycle, it)
+            mRecyclerView.scrollToPosition(0)
         }
     }
 }

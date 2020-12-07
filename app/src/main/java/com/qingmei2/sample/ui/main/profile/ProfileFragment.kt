@@ -2,26 +2,20 @@ package com.qingmei2.sample.ui.main.profile
 
 import android.os.Bundle
 import android.view.View
+import androidx.fragment.app.viewModels
 import com.bumptech.glide.request.RequestOptions
-import com.qingmei2.rhine.base.view.fragment.BaseFragment
-import com.qingmei2.rhine.ext.reactivex.clicksThrottleFirst
-import com.qingmei2.rhine.image.GlideApp
-import com.qingmei2.rhine.util.RxSchedulers
+import com.qingmei2.architecture.core.base.view.fragment.BaseFragment
+import com.qingmei2.architecture.core.ext.observe
+import com.qingmei2.architecture.core.image.GlideApp
 import com.qingmei2.sample.R
 import com.qingmei2.sample.utils.toast
-import com.uber.autodispose.autoDisposable
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.android.synthetic.main.fragment_profile.*
-import org.kodein.di.Kodein
-import org.kodein.di.generic.instance
 
+@AndroidEntryPoint
 class ProfileFragment : BaseFragment() {
 
-    override val kodein: Kodein = Kodein.lazy {
-        extend(parentKodein)
-        import(profileKodeinModule)
-    }
-
-    private val mViewModel: ProfileViewModel by instance()
+    private val mViewModel: ProfileViewModel by viewModels()
 
     override val layoutId: Int = R.layout.fragment_profile
 
@@ -31,14 +25,9 @@ class ProfileFragment : BaseFragment() {
     }
 
     private fun binds() {
-        mViewModel.observeViewState()
-                .observeOn(RxSchedulers.ui)
-                .autoDisposable(scopeProvider)
-                .subscribe(::onNewState)
+        observe(mViewModel.viewStateLiveData, this::onNewState)
 
-        mBtnEdit.clicksThrottleFirst()
-                .autoDisposable(scopeProvider)
-                .subscribe { toast { "coming soon..." } }
+        mBtnEdit.setOnClickListener { toast { "coming soon..." } }
     }
 
     private fun onNewState(state: ProfileViewState) {
@@ -47,7 +36,7 @@ class ProfileFragment : BaseFragment() {
         }
 
         if (state.userInfo != null) {
-            GlideApp.with(context!!)
+            GlideApp.with(requireContext())
                     .load(state.userInfo.avatarUrl)
                     .apply(RequestOptions().circleCrop())
                     .into(mIvAvatar)

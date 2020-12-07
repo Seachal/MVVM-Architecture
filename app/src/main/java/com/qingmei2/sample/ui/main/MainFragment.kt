@@ -5,36 +5,25 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
-import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.viewModels
 import androidx.viewpager.widget.ViewPager
-import com.qingmei2.rhine.adapter.ViewPagerAdapter
-import com.qingmei2.rhine.base.view.fragment.BaseFragment
-import com.qingmei2.rhine.ext.reactivex.clicksThrottleFirst
+import com.qingmei2.architecture.core.adapter.ViewPagerAdapter
+import com.qingmei2.architecture.core.base.view.fragment.BaseFragment
 import com.qingmei2.sample.R
 import com.qingmei2.sample.ui.main.home.HomeFragment
 import com.qingmei2.sample.ui.main.profile.ProfileFragment
 import com.qingmei2.sample.ui.main.repos.ReposFragment
-import com.uber.autodispose.autoDisposable
-import io.reactivex.Observable
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.android.synthetic.main.fragment_main.*
-import org.kodein.di.Kodein
-import org.kodein.di.generic.bind
-import org.kodein.di.generic.instance
 
 @Suppress("PLUGIN_WARNING")
 @SuppressLint("CheckResult")
+@AndroidEntryPoint
 class MainFragment : BaseFragment() {
-
-    override val kodein: Kodein = Kodein.lazy {
-        extend(parentKodein)
-        import(mainKodeinModule)
-        bind<FragmentManager>() with instance(childFragmentManager)
-    }
 
     override val layoutId: Int = R.layout.fragment_main
 
-    @Suppress("unused")
-    private val mViewModel: MainViewModel by instance()     // not used
+    private val mViewModel: MainViewModel by viewModels()     // not used
 
     private var isPortMode: Boolean = true
 
@@ -69,13 +58,9 @@ class MainFragment : BaseFragment() {
     }
 
     private fun bindsLandScreen() {
-        Observable.mergeArray(
-                fabHome.clicksThrottleFirst().map { 0 },
-                fabRepo.clicksThrottleFirst().map { 1 },
-                fabProfile.clicksThrottleFirst().map { 2 }
-        )
-                .autoDisposable(scopeProvider)
-                .subscribe(this::onPageSelectChanged)
+        fabHome.setOnClickListener { onPageSelectChanged(0) }
+        fabRepo.setOnClickListener { onPageSelectChanged(1) }
+        fabProfile.setOnClickListener { onPageSelectChanged(2) }
     }
 
     private fun onPageSelectChanged(index: Int) {
